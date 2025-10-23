@@ -54,7 +54,11 @@ def calculate_components(doc):
         'Funeral Policy': 0.25,
         'UFAWUZ': 0.03,
         'ZiBAWU': 0.02,
-        'LAPF': 0.06
+        'LAPF': 0.06,
+        'ZESCWU': 0.04,
+        'NEC Cleaning': 0.01,
+        'NECWEI': 0.04,
+        'Service Allowance': 0.01
     }
     
     # Fetch all tax rates from Company Tax Calculations
@@ -65,10 +69,10 @@ def calculate_components(doc):
             tax_components[component_name] = float(tax_percentage) / 100
     
     # Get Medical amount if it exists
+    medical_amount = 0
     for component_name, component in component_amounts.items():
         if "MEDICAL" in component_name.upper():
             medical_amount += component.amount or 0
-    medical_amount = component_amounts.get('MEDICAL', {}).get('amount', 0) or 0
     # Get Basic Salary amount for UFAWUZ calculation
     basic_salary = 0
     for earning in doc.earnings:
@@ -103,6 +107,10 @@ def calculate_components(doc):
     if component_exists_in_structure(structure, 'NEC Commercial'):
         add_or_update_component(doc, component_amounts, 'NEC Commercial', total_earnings * tax_components['NEC Commercial'])
     
+     # Calculate NEC Cleaning based on taxable income
+    if component_exists_in_structure(structure, 'NEC Cleaning'):
+        add_or_update_component(doc, component_amounts, 'NEC Cleaning', total_earnings * tax_components['NEC Cleaning'])
+    
     # Calculate NEC Mining based on taxable income
     if component_exists_in_structure(structure, 'NEC Mining'):
         add_or_update_component(doc, component_amounts, 'NEC Mining', total_earnings * tax_components['NEC Mining'])
@@ -110,6 +118,18 @@ def calculate_components(doc):
     # Calculate UFAWUZ based on basic salary
     if component_exists_in_structure(structure, 'UFAWUZ'):
         add_or_update_component(doc, component_amounts, 'UFAWUZ', basic_salary * tax_components['UFAWUZ'])
+
+    # Calculate NECWEI based on basic salary
+    if component_exists_in_structure(structure, 'NECWEI'):
+        add_or_update_component(doc, component_amounts, 'NECWEI', basic_salary * tax_components['NECWEI'])
+
+    # Calculate Service Allowance based on basic salary
+    if component_exists_in_structure(structure, 'Service Allowance'):
+        add_or_update_earning(doc, component_amounts, 'Service Allowance', basic_salary * tax_components['Service Allowance'])
+
+    # Calculate ZESCWU based on basic salary
+    if component_exists_in_structure(structure, 'ZESCWU'):
+        add_or_update_component(doc, component_amounts, 'ZESCWU', basic_salary * tax_components['ZESCWU'])
 
     # Calculate Cimas based on basic salary
     if component_exists_in_structure(structure, 'Cimas'):
@@ -159,6 +179,17 @@ def add_or_update_component(doc, component_dict, component_name, amount):
             'amount': amount
         })
         component_dict[component_name] = doc.deductions[-1]
+
+
+def add_or_update_earning(doc, component_dict, component_name, amount):
+    if component_name in component_dict:
+        component_dict[component_name].amount = amount
+    else:
+        doc.append('earnings', {
+            'salary_component': component_name,
+            'amount': amount
+        })
+        component_dict[component_name] = doc.earnings[-1]
 
 def calculate_tax(doc, component_amounts, tax_components, medical_amount):
     # Get tax slab

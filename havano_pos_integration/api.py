@@ -160,28 +160,84 @@ def get_products():
         # Get form data
         data = frappe.local.form_dict
         
-        # Get item_group from request body, if provided
-        # item_group = data.get("item_group")
-        item_groups = frappe.get_all(
+        # Get pagination parameters
+        page = int(data.get("page", 1))
+        limit = int(data.get("limit", 1000))
+        
+        # Validate pagination parameters
+        if page < 1:
+            page = 1
+        # if limit < 1 or limit > 100:  # Max limit of 100 to prevent performance issues
+        #     limit = 20
+            
+        # Calculate start for pagination
+        start = (page - 1) * limit
+        
+        # Get item_group from request body, if provided (can be single string or list)
+        item_group = data.get("item_group")
+        
+        # Get user's allowed item groups from permissions
+        user_item_groups = frappe.get_all(
             "User Permission",
             filters={"user": frappe.session.user, "allow": "Item Group"},
             fields=["for_value"]
         )
-        item_group_list = [ig["for_value"] for ig in item_groups]
+        user_item_group_list = [ig["for_value"] for ig in user_item_groups]
+        
         # Build filters based on whether item_group is provided
         filters = {}
-        if item_group_list:
-            filters['item_group'] = ["in", item_group_list]
+        
+        filters['disabled'] = 0
+        
+        # Handle item_group filtering (supports both single string and list)
+        if item_group:
+            # Convert single item_group to list for consistent handling
+            if isinstance(item_group, str):
+                requested_groups = [item_group]
+            elif isinstance(item_group, list):
+                requested_groups = item_group
+            else:
+                requested_groups = []
+            
+            # Filter requested groups to only include those user has permission for
+            if user_item_group_list:
+                # User has specific permissions, filter requested groups
+                allowed_groups = [group for group in requested_groups if group in user_item_group_list]
+                if allowed_groups:
+                    if len(allowed_groups) == 1:
+                        filters['item_group'] = allowed_groups[0]
+                    else:
+                        filters['item_group'] = ["in", allowed_groups]
+                else:
+                    # No requested groups are allowed, use user's allowed groups
+                    filters['item_group'] = ["in", user_item_group_list]
+            else:
+                # User has no specific permissions, use all requested groups
+                if len(requested_groups) == 1:
+                    filters['item_group'] = requested_groups[0]
+                else:
+                    filters['item_group'] = ["in", requested_groups]
+        else:
+            # No specific item_group requested, use user's allowed groups
+            if user_item_group_list:
+                filters['item_group'] = ["in", user_item_group_list]
         # if user_cost_center:
         #     filters['cost_center'] = ["=", user_cost_center]
-        # Fetch all necessary data for products in the "Products" item group
+        
+        # Get total count for pagination metadata
+        total_count = frappe.db.count("Item", filters=filters)
+        
+        # Fetch paginated product details
         product_details = frappe.get_all("Item", 
             filters=filters,
-            fields=["name","item_name", "item_code", "item_group", "is_stock_item"]
+            fields=["name","item_name", "item_code", "item_group", "is_stock_item"],
+            start=start,
+            limit=limit,
+            order_by="item_code"
         )
         
         products_data = frappe.get_all("Bin", fields=["item_code", "warehouse", "actual_qty"])
-        price_lists = frappe.get_all("Item Price", fields=["price_list", "price_list_rate", "item_code"])
+        price_lists = frappe.get_all("Item Price", fields=["price_list", "price_list_rate", "item_code","selling","buying"])
         
         # Initialize products dictionary with all items
         products = {detail['item_code']: {"warehouses": [], "prices": [], "taxes": []} for detail in product_details}
@@ -208,7 +264,8 @@ def get_products():
             if item_code in products:
                 products[item_code]["prices"].append({
                     "priceName": price["price_list"],
-                    "price": price["price_list_rate"]
+                    "price": price["price_list_rate"],
+                    "type": "selling" if price["selling"] else "buying"
                 })
         
         # Fetch taxes for each item individually
@@ -250,7 +307,27 @@ def get_products():
             }
             final_products.append(final_product)
         
-        create_response("200", {"Total Products": len(final_products), "products": final_products})
+        # Calculate pagination metadata
+        total_pages = (total_count + limit - 1) // limit  # Ceiling division
+        has_next_page = page < total_pages
+        has_prev_page = page > 1
+        
+        # Create pagination response
+        pagination_response = {
+            "products": final_products,
+            "pagination": {
+                "current_page": page,
+                "limit": limit,
+                "total_count": total_count,
+                "total_pages": total_pages,
+                "has_next_page": has_next_page,
+                "has_prev_page": has_prev_page,
+                "next_page": page + 1 if has_next_page else None,
+                "prev_page": page - 1 if has_prev_page else None
+            }
+        }
+        
+        create_response("200", pagination_response)
         return
         
     except Exception as e:
@@ -351,9 +428,37 @@ def get_user():
 @frappe.whitelist()
 def get_customer():
     try:
-        default_cost_center = frappe.db.get_value("User Permission", {"user": frappe.session.user, "allow": "Cost Center", "is_default": 1}, "for_value")       
-        # Fetch customer details with default price list
-        customers = frappe.get_all("Customer", filters = {"custom_cost_center": default_cost_center, "default_price_list": ["!=", ""]} ,fields = ["name", "customer_name","customer_type","custom_cost_center","custom_warehouse","gender","customer_pos_id","default_price_list"])
+        # Get form data
+        data = frappe.local.form_dict
+        
+        # Get pagination parameters
+        page = int(data.get("page", 1))
+        limit = int(data.get("limit", 1000))
+        
+        # Validate pagination parameters
+        if page < 1:
+            page = 1
+            
+        # Calculate start for pagination
+        start = (page - 1) * limit
+        
+        # default_cost_center = frappe.db.get_value("User Permission", {"user": frappe.session.user, "allow": "Cost Center", "is_default": 1}, "for_value")       
+        
+        # # Build filters
+        filters = {}
+        # filters = {"custom_cost_center": default_cost_center, "default_price_list": ["!=", ""]}
+        
+        # Get total count for pagination metadata
+        total_count = frappe.db.count("Customer", filters=filters)
+        
+        # Fetch customer details with default price list (with pagination)
+        customers = frappe.get_all("Customer", 
+            filters=filters,
+            fields=["name", "customer_name","customer_type","custom_cost_center","custom_warehouse","gender","customer_pos_id","default_price_list", "customer_group"],
+            start=start,
+            limit=limit,
+            order_by="name"
+        )
         
         for customer in customers:
             # Fetch item prices for each customer
@@ -492,7 +597,27 @@ def get_customer():
                 customer.earned_loyalty_points = 0
                 customer.net_loyalty_points = 0
         
-        create_response("200", customers)
+        # Calculate pagination metadata
+        total_pages = (total_count + limit - 1) // limit  # Ceiling division
+        has_next_page = page < total_pages
+        has_prev_page = page > 1
+        
+        # Create pagination response
+        pagination_response = {
+            "customers": customers,
+            "pagination": {
+                "current_page": page,
+                "limit": limit,
+                "total_count": total_count,
+                "total_pages": total_pages,
+                "has_next_page": has_next_page,
+                "has_prev_page": has_prev_page,
+                "next_page": page + 1 if has_next_page else None,
+                "prev_page": page - 1 if has_prev_page else None
+            }
+        }
+        
+        create_response("200", pagination_response)
         return
     except Exception as e:
         create_response("417", {"error": str(e)})

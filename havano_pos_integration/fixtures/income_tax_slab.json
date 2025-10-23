@@ -73,7 +73,8 @@
     "to_amount": 1000000.0
    }
   ],
-  "standard_tax_exemption_amount": 0.0
+  "standard_tax_exemption_amount": 0.0,
+  "tax_relief_limit": 0.0
  },
  {
   "allow_tax_exemption": 0,
@@ -149,7 +150,8 @@
     "to_amount": 1000000.0
    }
   ],
-  "standard_tax_exemption_amount": 0.0
+  "standard_tax_exemption_amount": 0.0,
+  "tax_relief_limit": 0.0
  },
  {
   "allow_tax_exemption": 0,
@@ -225,7 +227,8 @@
     "to_amount": 1000000.0
    }
   ],
-  "standard_tax_exemption_amount": 0.0
+  "standard_tax_exemption_amount": 0.0,
+  "tax_relief_limit": 0.0
  },
  {
   "allow_tax_exemption": 0,
@@ -301,7 +304,8 @@
     "to_amount": 1000000.0
    }
   ],
-  "standard_tax_exemption_amount": 0.0
+  "standard_tax_exemption_amount": 0.0,
+  "tax_relief_limit": 0.0
  },
  {
   "allow_tax_exemption": 0,
@@ -328,7 +332,7 @@
    },
    {
     "condition": null,
-    "custom_amount_deduction": 20.0,
+    "custom_amount_deduction": 0.0,
     "from_amount": 100.01,
     "parent": "Monthly",
     "parentfield": "slabs",
@@ -338,7 +342,7 @@
    },
    {
     "condition": null,
-    "custom_amount_deduction": 35.0,
+    "custom_amount_deduction": 0.0,
     "from_amount": 300.01,
     "parent": "Monthly",
     "parentfield": "slabs",
@@ -348,7 +352,7 @@
    },
    {
     "condition": null,
-    "custom_amount_deduction": 85.0,
+    "custom_amount_deduction": 0.0,
     "from_amount": 1000.01,
     "parent": "Monthly",
     "parentfield": "slabs",
@@ -358,7 +362,7 @@
    },
    {
     "condition": null,
-    "custom_amount_deduction": 185.0,
+    "custom_amount_deduction": 0.0,
     "from_amount": 2000.01,
     "parent": "Monthly",
     "parentfield": "slabs",
@@ -368,7 +372,7 @@
    },
    {
     "condition": null,
-    "custom_amount_deduction": 335.0,
+    "custom_amount_deduction": 0.0,
     "from_amount": 3000.01,
     "parent": "Monthly",
     "parentfield": "slabs",
@@ -377,6 +381,7 @@
     "to_amount": 1000000.0
    }
   ],
-  "standard_tax_exemption_amount": 0.0
+  "standard_tax_exemption_amount": 0.0,
+  "tax_relief_limit": 0.0
  }
 ]

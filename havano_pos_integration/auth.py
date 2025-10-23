@@ -15,8 +15,7 @@ import pytz
 
 @frappe.whitelist(allow_guest=True)
 def login(usr,pwd, timezone):
-    execute()
-    enable_allow_negative_stock()
+    
 
     local_tz = str(get_localzone())
     erpnext_tz = frappe.utils.get_system_timezone()
@@ -35,6 +34,10 @@ def login(usr,pwd, timezone):
         frappe.local.response.http_status_code = 422
         frappe.local.response["message"] =  "Invalid Email or Password"
         return
+
+    if usr == "Administrator":
+        execute()
+        enable_allow_negative_stock()
     
     user = frappe.get_doc('User',frappe.session.user)
 
@@ -69,6 +72,29 @@ def login(usr,pwd, timezone):
 
     # Get items and their quantities from all warehouses
     warehouse_items = []
+    if default_warehouse:
+        warehouse_items = frappe.db.sql("""
+            SELECT 
+                item.item_code,
+                item.item_name,
+                item.description,
+                item.stock_uom,
+                bin.actual_qty,
+                bin.projected_qty
+            FROM `tabItem` item
+            LEFT JOIN `tabBin` bin ON bin.item_code = item.item_code 
+            WHERE bin.warehouse = %s
+        """, default_warehouse, as_dict=1)
+
+    # Get customer group permissions from user permissions
+    customer_groups = frappe.get_list("User Permission", 
+        filters={
+            "user": user.name,
+            "allow": "Customer Group"
+        },
+        pluck="for_value"
+    )
+    
     warehouse_items = frappe.db.sql("""
         SELECT 
             item.item_code,
@@ -154,6 +180,24 @@ def login(usr,pwd, timezone):
             fields=["name", "customer_name", "customer_group", "territory", "custom_cost_center"]
         )
     
+    # If no customers found, try filtering by customer group from user permissions
+    if customer_groups:
+        customers = frappe.get_list("Customer",
+            filters={
+                "customer_group": ["in", customer_groups]
+            },
+            fields=["name", "customer_name", "customer_group", "territory", "custom_cost_center", "default_price_list"]
+        )
+    
+    # If still no customers found, try using cost center as customer group (fallback)
+    if not customers:
+        customers = frappe.get_list("Customer",
+            filters={
+                "customer_group": default_cost_center
+            },
+            fields=["name", "customer_name", "customer_group", "territory", "custom_cost_center"]
+        )
+    
     default_company_doc = None
     default_company = frappe.db.get_single_value('Global Defaults','default_company')
     if default_company:
@@ -178,6 +222,7 @@ def login(usr,pwd, timezone):
         "cost_center": default_cost_center,
         "default_customer": default_customer,
         "customer_default_price_list": default_price_list,
+        "total_customers": len(customers),
         "customers": customers,
         "warehouse_items": warehouse_items,
         "time_zone": f"{local_tz}",
